@@ -15,4 +15,4 @@ WORKDIR /home/k6
 
 COPY . .
 
-ENTRYPOINT ["/bin/bash", "-c", ". src/tc.sh && k6 run src/run.js"]
+ENTRYPOINT ["/bin/bash", "-c", "k6 run src/run.js"]
