@@ -361,7 +361,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         if (!data.file) return;
 
         let files = data.file
-            .map((item) => b64decode(item, "url", "s"))
+            .map((item) => decodeURIComponent(b64decode(item, "url", "s")))
             .filter((name) => !name.endsWith("_"));
 
         for (let file of files) {
@@ -485,7 +485,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             return emit(EV_FILE_SAVE, {
                 ownerId: target_ptc_id,
                 file: currentFile,
-                content: targetData.dir[currentFile] || '',
+                content: targetData.dir[currentFile].content || '',
             }, chain)
 
         },
