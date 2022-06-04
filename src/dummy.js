@@ -396,7 +396,7 @@ auto_update_views = [
 auto_create_views = [
     UserAdmin, AdminAccessLogAdmin,
 ]
-    `, `# https://github.com/a2tt/Flask-Sqlalchemy-Admin-Sample/blob/main/project/models/base.py
+    \n`, `# https://github.com/a2tt/Flask-Sqlalchemy-Admin-Sample/blob/main/project/models/base.py
     import datetime
 
     from sqlalchemy import Column, types
@@ -441,7 +441,7 @@ auto_create_views = [
         form = Column(types.String, nullable=True)
 
         created_at = Column(types.DateTime, nullable=False, default=datetime.datetime.utcnow)
-    `, `# https://github.com/a2tt/flask-oauth-example/blob/main/flask_server.py
+    \n`, `# https://github.com/a2tt/flask-oauth-example/blob/main/flask_server.py
     import time
     import requests
     from urllib.parse import urlencode
@@ -546,7 +546,7 @@ auto_create_views = [
 
     if __name__ == '__main__':
         app.run(debug=True)
-    `, `# https://github.com/a2tt/flask-oauth-example/blob/main/oauth_config.py
+    \n`, `# https://github.com/a2tt/flask-oauth-example/blob/main/oauth_config.py
     """
     google https://developers.google.com/identity/protocols/OAuth2WebServer
     naver https://developers.naver.com/docs/login/api/
@@ -675,7 +675,7 @@ auto_create_views = [
             }
         }
     }
-    `, `# https://github.com/a2tt/Flask-Sqlalchemy-Admin-Sample/blob/main/project/views/admin.py
+    \n`, `# https://github.com/a2tt/Flask-Sqlalchemy-Admin-Sample/blob/main/project/views/admin.py
     import json
 import re
 import functools
@@ -963,7 +963,7 @@ def user_detail(p_key):
 @bp.route('/management')
 def manage():
     return 'management'
-    `, `# https://github.com/a2tt/fast-ssh-relay/blob/main/server/ssh.py 
+    \n`, `# https://github.com/a2tt/fast-ssh-relay/blob/main/server/ssh.py 
 from __future__ import annotations
 
 import json
@@ -1198,5 +1198,5 @@ def ssh_connect(
 
     ssh_clients[connection_info.key].add(ssh_worker)
     return ssh_worker
-    `,
+    \n`,
 ]

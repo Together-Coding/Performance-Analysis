@@ -16,7 +16,7 @@ import { b64decode } from "k6/encoding";
 import { uuidv4, randomIntBetween } from "./k6_utils.js";
 import { textSummary } from "./k6_summary.js"
 
-import { isObject, getEvent, getRandFileName, getRandFromObjKey, getRandWords } from "./utils.js";
+import { isObject, getEvent, getRandFileName, getRandFromObjKey, getRandWords, getRandWord } from "./utils.js";
 import { getTaskArn } from "./server.js";
 import {
     EV_ECHO,
@@ -45,6 +45,7 @@ import {
     EV_FEEDBACK_LIST,
 
 } from "./constants.js";
+import { codes } from "./dummy.js";
 
 // maximal period. In the meanwhile, ending flag is used to stop testing.
 const MAX_TEST_PERIOD = 1000 * 60 * 60;
@@ -162,6 +163,10 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         feedbacks: {}, // feedback_id: {...}
     };
     let currentFile = null; // currently opened file
+    const dummyCode = {
+        code: codes[randomIntBetween(0, codes.length - 1)],
+        pos: 0, // seek position
+    }
 
     const eventHandler = {}
     const eventChain = {}
@@ -262,6 +267,62 @@ export default function ({ url, configs, server_url, task_arn, token }) {
 
         // Abort K6 by closing connection
         socket.close()
+    }
+
+    /**
+     * Return a few letters of code snippet formatted for FILE_MOD emission.
+     */
+    const readCodeToModify = () => {
+        // Read a few from code
+        let readLen = randomIntBetween(5, 20);
+        let codeStr = dummyCode.code.slice(dummyCode.pos, dummyCode.pos + readLen);
+
+        // Write currentFile, because the writer does not receive his/her FILE_MOD event.
+        targetData.dir[currentFile].content += codeStr;
+
+        // Update pos
+        dummyCode.pos += readLen;
+        if (dummyCode.pos >= dummyCode.code.length) dummyCode.pos -= dummyCode.code.length;
+
+        // Add backspaces for little bit of reality. 
+        let codeStrRes = [];
+        let intact = 0;  // not backspaced length
+
+        for (let i = 0; i < codeStr.length; i++) {
+            codeStrRes.push(codeStr[i])
+            intact += 1;
+            let p = Math.random();
+            if (p < 0.05) {
+                let randWord = getRandWord();
+                for (let j = 0; j < randWord.length; j++)
+                    codeStrRes.push(randWord[j]);
+                for (let j = 0; j < randWord.length; j++)
+                    codeStrRes.push(8);
+                intact = 0
+            } else if (p < 0.2) {
+                let toBack = randomIntBetween(0, intact)
+                let backedChar = []
+                for (let j = 0; j < toBack; j++) {
+                    backedChar.push(codeStrRes[codeStrRes.length + (-1) * (2 * j + 1)])
+                    codeStrRes.push(8) // backspace
+                }
+                for (let j = 0; j < toBack; j++)
+                    codeStrRes.push(backedChar[toBack - j - 1]);
+                intact = toBack;
+            }
+        }
+        return codeStrRes;
+    }
+
+    /**
+     * Return last position cursor of ``currentFile``
+     */
+    const lastPositionCursor = () => {
+        if (currentFile == null || targetData.dir[currentFile] == null) return '0.0';
+
+        let row = (targetData.dir[currentFile].content.match(/\n/g) || []).length;
+        let col = targetData.dir[currentFile].content.split('\n')[row].length
+        return `${row}.${col}`
     }
 
 
@@ -409,8 +470,13 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             }, chain)
         },
         [EV_FILE_MOD]: (chain) => {
-            // TODO: 테스터는 그냥 형식에 맞게 랜덤하게 보내기만 하면 됨. 클라에서 처리하는게 문제임.
-            // TODO: codes 텍스트에 버퍼링을 하면서 주기적으로 코드 공유를 보내면 될 듯
+            return emit(EV_FILE_MOD, {
+                ownerId: target_ptc_id,
+                file: currentFile,
+                cursor: lastPositionCursor(),
+                timestamp: Date.now(),
+                change: readCodeToModify(),
+            })
 
         },
         [EV_FILE_SAVE]: (chain) => {
@@ -518,7 +584,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         socket.setInterval(() => {
             let resp = http.get(
                 server_url + "/admin/test/" + configs.test_config.id,
-                params = { timeout: '10s' }
+                { timeout: '10s' }
             )
             if (resp.status != 200) {
                 console.error("/admin/test/" + configs.test_config.id, resp);

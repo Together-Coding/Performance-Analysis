@@ -1,6 +1,6 @@
 import { randomIntBetween } from "./k6_utils.js"
 import { eventProb, FILE_EXT } from "./constants.js";
-import { codes, words } from "./dummy.js";
+import { words } from "./dummy.js";
 
 export function isObject(v) {
     return typeof v === 'object' && !Array.isArray(v) && v !== null;
