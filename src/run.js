@@ -9,14 +9,42 @@
 
 
 // 1. init code
+import { check } from "k6";
 import ws from "k6/ws";
 import http from "k6/http";
-import { check } from "k6";
-import exec from 'k6/execution';
+import { b64decode } from "k6/encoding";
+import { uuidv4, randomIntBetween } from "./k6_utils.js";
 import { textSummary } from "./k6_summary.js"
 
-import { uuidv4, isObject } from "./utils.js";
+import { isObject, getEvent, getRandFileName, getRandFromObjKey, getRandWords } from "./utils.js";
 import { getTaskArn } from "./server.js";
+import {
+    EV_ECHO,
+    EV_TIMESTAMP_ACK,
+    EV_TIME_SYNC,
+    EV_TIME_SYNC_ACK,
+
+    EV_INIT_LESSON,
+    EV_ACTIVITY_PING,
+    EV_ALL_PARTICIPANT,
+    EV_PARTICIPANT_STATUS,
+    EV_PROJECT_ACCESSIBLE,
+
+    EV_DIR_INFO,
+    EV_FILE_CREATE,
+    EV_FILE_READ,
+    EV_FILE_UPDATE,
+    EV_FILE_DELETE,
+    EV_FILE_MOD,
+    EV_FILE_SAVE,
+    EV_CURSOR_MOVE,
+
+    EV_FEEDBACK_ADD,
+    EV_FEEDBACK_COMMENT,
+    EVENT_RATE,
+    EV_FEEDBACK_LIST,
+
+} from "./constants.js";
 
 // maximal period. In the meanwhile, ending flag is used to stop testing.
 const MAX_TEST_PERIOD = 1000 * 60 * 60;
@@ -121,18 +149,53 @@ export default function ({ url, configs, server_url, task_arn, token }) {
     let socket;
     let log = [];
     let status = 0; // 0: initial waiting. 1: started. 2: ended
+
+    let initialized = false;
+    let target_ptc_id = configs.test_config.target_ptc_id || configs.ptc_id; // if null, interact with itself
+    let targetData = {
+        dir: {}, // filename: {content: ..., ...}
+        accessible_to: [],
+        accessed_by: [],
+    };
+    let globalData = {
+        all_participant: {}, // id: ptc into
+        feedbacks: {}, // feedback_id: {...}
+    };
+    let currentFile = null; // currently opened file
+
     const eventHandler = {}
+    const eventChain = {}
 
     const on = (event, listener) => {
         eventHandler[event] = (data) => {
-            console.log(`Recv : ${log.length}`)
+            log.push(data);
+            if (log.length % 100 == 0) console.log(`Recv : ${log.length}`);
 
-            log.push(data)
-            return listener(data);
+            // Call event handler
+            listener(data);
+
+            // Call chains
+            for (let i = 0; i < (eventChain[event] ? eventChain[event].length : 0); i++)
+                (eventChain[event].shift())();
         };
     }
 
-    const emit = (event, data, type = 42) => {
+    const addChain = (event, chain) => {
+        if (chain == null) return;
+
+        if (eventChain[event] == null) eventChain[event] = []
+        eventChain[event].push(chain)
+    }
+
+    /**
+     * @param {*} chain one-time callback when ``event`` is received
+     */
+    const emit = (event, data = null, chain = null, type = 42) => {
+        if (typeof chain == "function") chain = [chain];
+        if (chain != null) {
+            for (let c of chain) addChain(event, c);
+        }
+
         let msg;
         if (type == 42) {
             if (data == null) data = {}
@@ -149,32 +212,32 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             msg = `${type}`;
         }
         socket.send(msg);
+        console.info('    🚀    EMIT', msg)
     }
-
-    on('TIME_SYNC_ACK', (data) => {
-        data.ts2 = new Date().getTime();
-        emit('TIME_SYNC_ACK', data);
-    })
-
-    on('echo', (data) => { })
 
     const cantHandleMessage = (e, data) => {
         if (data === "2") {
             // ping
-            emit('pong', null, 3)
+            emitHandler["ping"]();
         } else {
-            console.error(e, data);
+            // console.error(e, data);
         }
+    }
+
+    const getRandCursor = () => {
+        if (targetData.dir[currentFile] == null) return [0, 0, 0];
+
+        let line = (targetData.dir[currentFile].content.match(/\n/g) || []).length + 1;
+        let cursorPos = randomIntBetween(1, line);
+        let cursorPosCol = randomIntBetween(1, 10);
+        return [line, cursorPos, cursorPosCol];
     }
 
     /**
      * Notify end of test to the server sending log data.
      */
     const notifyEnd = () => {
-        let payload = JSON.stringify({
-            task_arn,
-            log,
-        })
+        let payload = JSON.stringify({ task_arn, log, })
 
         let params = {
             headers: { 'Content-Type': 'application/json' }
@@ -194,55 +257,332 @@ export default function ({ url, configs, server_url, task_arn, token }) {
 
         // Disconnect socket connection
         status = 2;
-        emit('disconnect', null, 41);
+        emitHandler["disconnect"]()
         socket.close();
 
-        // Abort K6
-        exec.test.abort("End");
+        // Abort K6 by closing connection
+        socket.close()
     }
 
-    const echo = () => {
-        emit('echo', {
-            'ping': 'pong',
-            'uuid': uuidv4(),
-            '_ts_1': new Date().getTime(),
-        });
+
+    /**
+     * Subscribe events
+     */
+    on(EV_TIME_SYNC_ACK, (data) => {
+        data.ts2 = new Date().getTime();
+        emitHandler[EV_TIME_SYNC_ACK](data);
+    })
+
+    on(EV_ECHO, (data) => { })
+
+    on(EV_INIT_LESSON, (data) => {
+        emitHandler[EV_ALL_PARTICIPANT]()
+        emitHandler[EV_PROJECT_ACCESSIBLE]()
+    })
+
+    on(EV_ALL_PARTICIPANT, data => {
+        for (let d of data.participants) {
+            globalData.all_participant[d.id] = d
+        }
+    })
+
+    on(EV_PARTICIPANT_STATUS, data => {
+        globalData.all_participant[data.id] = data
+    })
+
+    on(EV_PROJECT_ACCESSIBLE, data => {
+        targetData.accessible_to = data.accessible_to
+        targetData.accessed_by = data.accessed_by
+    })
+
+    on(EV_DIR_INFO, data => {
+        if (data.error) return;
+        if (!data.file) return;
+
+        let files = data.file
+            .map((item) => b64decode(item, "url", "s"))
+            .filter((name) => !name.endsWith("_"));
+
+        for (let file of files) {
+            targetData.dir[file] = { content: '' }
+        }
+    })
+
+    on(EV_FILE_READ, data => {
+        if (data.ownerId != target_ptc_id) return;
+        else if (targetData.dir[data.file])
+            targetData.dir[data.file].content = data.content;
+        else
+            targetData.dir[data.file] = { content: data.content };
+        currentFile = data.file
+
+        // sync cursor
+        emitHandler[EV_CURSOR_MOVE]("open");
+    })
+
+    on(EV_FILE_CREATE, data => {
+        if (data.error) return;
+        else if (data.ownerId != target_ptc_id) return;
+        else if (data.type == 'directory') return;
+        targetData.dir[data.name] = { content: '' }
+    })
+
+    on(EV_FILE_DELETE, data => {
+        if (data.ownerId != target_ptc_id) return;
+        else if (data.error) return;
+        delete targetData.dir[data.name]
+    })
+
+    on(EV_FILE_UPDATE, data => {
+        if (data.error) return;
+        else if (data.ownerId != target_ptc_id) return;
+        else if (data.type == 'file') {
+            const prev = Object.assign({}, targetData.dir[data.name]);
+            delete targetData.dir[data.name]
+            targetData.dir[data.rename] = prev;
+        } else {
+            // directory
+        }
+    })
+
+    on(EV_CURSOR_MOVE, data => {
+        if (data.ptcId != target_ptc_id) return;
+        else {
+            // XXX: I think, there's nothing to do on this event when it comes to testing.
+        }
+    })
+
+    on(EV_FILE_SAVE, data => { })
+
+    on(EV_FEEDBACK_LIST, data => {
+        for (let d of data) {
+            let feedbacks = d.refs ? (d.refs.feedbacks ? d.refs.feedbacks : []) : [];
+            for (let f of feedbacks) {
+                // Only save accessible feedbacks
+                if (f.acl && f.acl.includes(configs.ptc_id)) {
+                    globalData.feedbacks[f.id] = f;
+                }
+            }
+        }
+    })
+
+    on(EV_FEEDBACK_ADD, data => {
+        let f = data.feedback;
+        f.comments = [data.comment];
+        globalData.feedbacks[f.id] = f;
+    })
+
+    on(EV_FEEDBACK_COMMENT, data => {
+        let f = data.feedback
+        if (globalData.feedbacks[f.id] == null) globalData.feedbacks[f.id] = f;
+        if (globalData.feedbacks[f.id].comments == null) globalData.feedbacks[f.id].comments = [];
+
+        globalData.feedbacks[f.id].comments.push(data.comment);
+    })
+
+    /**
+     * Register emit handler
+     */
+    const emitHandler = {
+        // Periodic and randomly
+        [EV_DIR_INFO]: (chain) => {
+            return emit(EV_DIR_INFO, { targetId: target_ptc_id }, chain)
+        },
+        [EV_FILE_READ]: (chain) => {
+            return emit(EV_FILE_READ, {
+                ownerId: target_ptc_id,
+                file: getRandFromObjKey(targetData.dir),
+            }, chain)
+        },
+        [EV_CURSOR_MOVE]: (event = "move", chain) => {
+            // or event="open"
+            let c = getRandCursor()
+            return emit(EV_CURSOR_MOVE, {
+                fileInfo: {
+                    ownerId: target_ptc_id, // owner
+                    file: currentFile, // current viewed file
+                    line: c[0], // Total line num
+                    cursor: `${c[1]}.${c[2]}`,
+                },
+                event,
+                timestamp: Date.now(),
+            }, chain)
+        },
+        [EV_FILE_MOD]: (chain) => {
+            // TODO: 테스터는 그냥 형식에 맞게 랜덤하게 보내기만 하면 됨. 클라에서 처리하는게 문제임.
+            // TODO: codes 텍스트에 버퍼링을 하면서 주기적으로 코드 공유를 보내면 될 듯
+
+        },
+        [EV_FILE_SAVE]: (chain) => {
+            if (currentFile == null || targetData.dir[currentFile] == null) return;
+
+            return emit(EV_FILE_SAVE, {
+                ownerId: target_ptc_id,
+                file: currentFile,
+                content: targetData.dir[currentFile] || '',
+            }, chain)
+
+        },
+        [EV_FEEDBACK_ADD]: (chain) => {
+            let c = getRandCursor()
+            return emit(EV_FEEDBACK_ADD, {
+                ref: {
+                    ownerId: target_ptc_id,
+                    file: currentFile,
+                    line: `${c[1]}.${c[2]}`
+                },
+                acl: Object.keys(globalData.all_participant),  // all ptcs
+                comment: getRandWords() + "???",
+            }, chain)
+        },
+        [EV_FEEDBACK_COMMENT]: (chain) => {
+            if (Object.keys(globalData.feedbacks).length <= 0) return emitHandler[EV_FEEDBACK_ADD](chain);
+            return emit(EV_FEEDBACK_COMMENT, {
+                feedbackId: getRandFromObjKey(globalData.feedbacks),
+                content: getRandWords() + "."
+            }, chain)
+        },
+
+        /* Non-periodic */
+        [EV_FEEDBACK_LIST]: (chain) => emit(EV_FEEDBACK_LIST, null, chain),
+        [EV_ECHO]: (chain) => {
+            return emit(EV_ECHO, { 'ping': 'pong' }, chain)
+        },
+        [EV_ACTIVITY_PING]: (chain) => {
+            return emit(EV_ACTIVITY_PING, { targetId: target_ptc_id }, chain)
+        },
+        [EV_ALL_PARTICIPANT]: (chain) => emit(EV_ALL_PARTICIPANT, chain),
+        [EV_PROJECT_ACCESSIBLE]: (chain) => emit(EV_PROJECT_ACCESSIBLE, chain),
+        [EV_FILE_CREATE]: (chain) => {
+            return emit(EV_FILE_CREATE, {
+                ownerId: target_ptc_id,
+                type: 'file',
+                name: getRandFileName(),
+            }, chain)
+        },
+        [EV_FILE_UPDATE]: (chain) => {
+            return emit(EV_FILE_UPDATE, {
+                ownerId: target_ptc_id,
+                type: 'file',
+                name: getRandFromObjKey(targetData.dir),
+                rename: getRandFileName(),
+            }, chain)
+        },
+        [EV_FILE_DELETE]: (chain) => {
+            const filename = getRandFromObjKey(targetData.dir);
+            if (filename === currentFile) return;
+            return emit(EV_FILE_DELETE, {
+                ownerId: target_ptc_id,
+                type: 'file',
+                name: filename,
+            }, chain)
+        },
+        [EV_INIT_LESSON]: (data, chain) => {
+            return emit(EV_INIT_LESSON, data, chain)
+        },
+        [EV_TIME_SYNC]: (data) => emit(EV_TIME_SYNC, data),
+        [EV_TIME_SYNC_ACK]: (data) => emit(EV_TIME_SYNC_ACK, data),
+        [EV_TIMESTAMP_ACK]: (data) => emit(EV_TIMESTAMP_ACK, data),
+        Authorization: (message) => emit("Authorization", message, null, 40),
+        disconnect: () => emit('disconnect', null, null, 41),
+        ping: () => emit('ping', null, null, 3),
     }
 
-    const emitRandom = (socket) => {
-        if (status !== 1) return;
-
-        // TODO: emit event 랜덤하게 실행
-        echo();
+    const isEmittable = () => {
+        return status === 1 && initialized
     }
 
+    /**
+     * Emit random event
+     */
+    const emitRandom = () => {
+        if (!isEmittable()) return;
+
+        let handler = emitHandler[getEvent()];
+        handler && handler();
+    }
+
+    const emitAfterInit = (event, ...args) => {
+        if (!isEmittable()) return;
+        emitHandler[event](...args);
+    }
+
+    /**
+     * Start test
+     */
     const response = ws.connect(url, {}, function (_socket) {
         socket = _socket
+        let timeout_10s = null;
+        let timeout_60s = null;
+
         socket.setInterval(() => {
-            let resp = http.get(server_url + "/admin/test/" + configs.test_config.id)
-            if (resp.status != 200) return console.error("/admin/test/" + configs.test_config.id, resp)
+            let resp = http.get(
+                server_url + "/admin/test/" + configs.test_config.id,
+                params = { timeout: '10s' }
+            )
+            if (resp.status != 200) {
+                console.error("/admin/test/" + configs.test_config.id, resp);
+                stopTest(socket);
+            }
 
             configs.test_config = JSON.parse(resp.body)
             if (status === 0 && configs.test_config.started) {
                 // Start testing
                 status = 1
-            } else if (configs.test_config.deleted || status === 1 && configs.test_config.ended) {
+            } else if (configs.test_config.deleted || (status === 1 && configs.test_config.ended)) {
                 // Stop testing
                 stopTest(socket);
             }
+
+            if (!timeout_10s) {
+                timeout_10s = 1
+                socket.setTimeout(() => {
+                    emitAfterInit(EV_ACTIVITY_PING)
+                    emitAfterInit(EV_FEEDBACK_LIST)
+                    timeout_10s = null;
+                }, 1000 * 10)
+            }
+            if (!timeout_60s) {
+                if (!isEmittable()) return;
+                timeout_60s = 1
+                socket.setTimeout(() => {
+                    emitAfterInit(EV_FILE_CREATE)
+                    timeout_60s = null;
+                }, 1000 * 60)
+            }
         }, 1000)
 
-        socket.setInterval(() => echo(), 1000 * 10);
-
         // on connection
-        socket.on("open", function open() {
-            emit("Authorization", `Bearer ${token}`, 40)
-            emit('TIME_SYNC', { ts1: new Date().getTime() })
+        socket.on("open", () => {
+            emitHandler["Authorization"](`Bearer ${token}`)
+            emitHandler[EV_TIME_SYNC]({ ts1: new Date().getTime() });
+            emitHandler[EV_INIT_LESSON]({
+                courseId: configs.test_config.course_id,
+                lessonId: configs.test_config.lesson_id,
+            }, () => {
+                emitHandler[EV_DIR_INFO](() => {
+                    if (Object.keys(targetData.dir).length == 0) {
+                        emitHandler[EV_FILE_CREATE](() => {
+                            emitHandler[EV_FILE_READ](() => {
+                                initialized = true;
+                            });
+                        });
+                    } else {
+                        emitHandler[EV_FILE_READ](() => {
+                            initialized = true;
+                        });
+                    }
+                }, () => {
+                    emitHandler[EV_FEEDBACK_LIST]();
+                });
+            })
         });
 
         socket.setInterval(() => {
-            emitRandom();
-        }, 1000 * 0.5);
+            socket.setTimeout(() => {
+                emitRandom();
+            }, 1)
+        }, 1000 / EVENT_RATE);
 
         // on message (event)
         socket.on("message", (msg) => {
@@ -259,11 +599,11 @@ export default function ({ url, configs, server_url, task_arn, token }) {
                 return cantHandleMessage(e, msg);
             }
 
-            console.log(type, event, data)
+            console.info("      👀  RECV ", type, event, data)
 
             if (isObject(data) && data.hasOwnProperty('_ts_3')) {
                 data['_ts_4'] = new Date().getTime();
-                emit('TIMESTAMP_ACK', data);
+                emitHandler[EV_TIMESTAMP_ACK](data);
             } else {
                 console.error(data)
             }
