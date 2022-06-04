@@ -1,0 +1,71 @@
+{
+    "Cluster": "arn:aws:ecs:ap-northeast-2:{AWS_ID}:cluster/{CLUSTER_NAME}",
+    "TaskARN": "arn:aws:ecs:ap-northeast-2:{AWS_ID}:task/{CLUSTER_NAME}/{TASK_ID}",
+    "Family": "{??}",
+    "Revision": "1",
+    "DesiredStatus": "RUNNING",
+    "KnownStatus": "RUNNING",
+    "Limits": {
+        "CPU": 0.25,
+        "Memory": 512
+    },
+    "PullStartedAt": "2022-05-31T18:29:14.362278096Z",
+    "PullStoppedAt": "2022-05-31T18:29:19.666326127Z",
+    "AvailabilityZone": "ap-northeast-2a",
+    "Containers": [
+        {
+            "DockerId": "{TASK_ID}-527074092",
+            "Name": "app",
+            "DockerName": "app",
+            "Image": "{AWS_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/{ECR_NAME}:latest",
+            "ImageID": "...",
+            "Labels": {
+                "com.amazonaws.ecs.cluster": "arn:aws:ecs:ap-northeast-2:{AWS_ID}:cluster/{CLUSTER_NAME}",
+                "com.amazonaws.ecs.container-name": "app",
+                "com.amazonaws.ecs.task-arn": "arn:aws:ecs:ap-northeast-2:{AWS_ID}:task/{CLUSTER_NAME}/c6c6f12246ba4be181b0e25090416caf",
+                "com.amazonaws.ecs.task-definition-family": "{TASK_DEF}",
+                "com.amazonaws.ecs.task-definition-version": "1"
+            },
+            "DesiredStatus": "RUNNING",
+            "KnownStatus": "RUNNING",
+            "Limits": {
+                "CPU": 2
+            },
+            "CreatedAt": "2022-05-31T18:29:21.466629798Z",
+            "StartedAt": "2022-05-31T18:29:21.466629798Z",
+            "Type": "NORMAL",
+            "Networks": [
+                {
+                    "NetworkMode": "awsvpc",
+                    "IPv4Addresses": [
+                        "172.31.7.238"
+                    ],
+                    "AttachmentIndex": 0,
+                    "MACAddress": "02:d9:21:84:59:3e",
+                    "IPv4SubnetCIDRBlock": "172.31.0.0/20",
+                    "DomainNameServers": [
+                        "172.31.0.2"
+                    ],
+                    "DomainNameSearchList": [
+                        "ap-northeast-2.compute.internal"
+                    ],
+                    "PrivateDNSName": "ip-172-31-7-238.ap-northeast-2.compute.internal",
+                    "SubnetGatewayIpv4Address": "172.31.0.1/20"
+                }
+            ],
+            "ContainerARN": "arn:aws:ecs:ap-northeast-2:{AWS_ID}:container/{CLUSTER_NAME}/{TASK_ID}/78085b9a-7a17-4bf9-ad17-fbd7a8b67a57",
+            "LogOptions": {
+                "awslogs-group": "/ecs/{LOG_GROUP}",
+                "awslogs-region": "ap-northeast-2",
+                "awslogs-stream": "ecs/app/{TASK_ID}"
+            },
+            "LogDriver": "awslogs"
+        }
+    ],
+    "LaunchType": "FARGATE",
+    "ClockDrift": {
+        "ClockErrorBound": 0.425687,
+        "ReferenceTimestamp": "2022-05-31T18:28:50Z",
+        "ClockSynchronizationStatus": "SYNCHRONIZED"
+    }
+}

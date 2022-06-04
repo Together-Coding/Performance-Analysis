@@ -9,7 +9,6 @@ RUN echo "deb https://dl.k6.io/deb stable main" | tee /etc/apt/sources.list.d/k6
 
 RUN apt-get update
 RUN apt-get install k6 -y
-RUN apt-get install iproute2 -y
 
 WORKDIR /home/k6
 
