@@ -15,7 +15,7 @@ import http from "k6/http";
 import { b64decode } from "k6/encoding";
 import { uuidv4, randomIntBetween } from "./k6_utils.js";
 import { textSummary } from "./k6_summary.js"
-import { Counter } from "k6/metrics";
+import { Counter, Trend } from "k6/metrics";
 
 import { isObject, getEvent, getRandFileName, getRandFromObjKey, getRandWords, getRandWord } from "./utils.js";
 import { getTaskArn } from "./server.js";
@@ -70,6 +70,7 @@ export const options = {
 const eventDelayCounter = {}
 const eventSendCounter = {}
 const eventRecvCounter = {}
+const remainingTimeCounter = new Trend('REMAINING_TIME')
 
 for (let i = 0; i < eventProb.length; i++) {
     let ev = eventProb[i][0];
@@ -612,6 +613,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             }
 
             configs.test_config = JSON.parse(resp.body)
+            remainingTimeCounter.add(configs.test_config.remaining_time)
             if (status === 0 && configs.test_config.started) {
                 // Start testing
                 status = 1

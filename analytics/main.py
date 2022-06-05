@@ -28,9 +28,11 @@ ABS_PATH = os.getcwd()
 LOG_PATH = os.path.join("logs")
 
 SUMMARY_FILE_PREFIX = "summary-"
+
 DELAY_METRIC_PREFIX = "DELAY_"
 RECV_METRIC_PREFIX = "RECV_"
 SEND_METRIC_PREFIX = "SEND_"
+REMAINING_TIME_KEY = "REMAINING_TIME"
 
 EV_FILE_MOD = "FILE_MOD"
 
@@ -57,8 +59,8 @@ def main():
             # else:
             #     log_files.append(content)
 
-    ws_msgs_sent = 0  # kB
-    ws_msgs_received = 0  # kB
+    bytes_sent = 0  # kB
+    bytes_recv = 0  # kB
 
     recv_counter = defaultdict(int)  # recv count
     send_counter = defaultdict(int)  # send count
@@ -70,9 +72,9 @@ def main():
 
     for summary in summary_files:
         metrics: dict = summary["metrics"]
-        ws_msgs_sent += metrics["ws_msgs_sent"]["values"]["count"]
-        ws_msgs_received += metrics["ws_msgs_received"]["values"]["count"]
-        duration_ = metrics["ws_session_duration"]["values"]["max"]
+        # bytes_sent += metrics["ws_msgs_sent"]["values"]["count"]  # ws_msgs_* is the number of messages sent/recved
+        # bytes_recv += metrics["ws_msgs_received"]["values"]["count"]
+        duration_ = round(metrics["REMAINING_TIME"]["values"]["max"], -1)  # round to int
         if duration_ > duration:
             duration = duration_
 
@@ -105,29 +107,29 @@ def main():
         v = delay_counter[ev] / recv_counter[ev]
         print(f"{ev:16} : {delay_counter[ev]:>10} / {recv_counter[ev]:<7} = {round(v, 2):8} ms/recv")
 
-    duration_sec = duration / 1000
     test_machine_num = len(summary_files)
     print("\n# Summary")
-    print(f"\nTest Machine Num : {test_machine_num:>10}")
+    print(f"Test Machine Num : {test_machine_num:>10}")
 
-    print(f"Sent Event       : {total_send:>10} / {rnd(duration_sec):<7} = {rnd(total_send / duration_sec):8} #/s")
-    print(f"Sent Data        : {ws_msgs_sent:>10} / {rnd(duration_sec):<7} = {rnd(ws_msgs_sent / duration_sec):8} kB/s")
-    print(f"Data per send    : {ws_msgs_sent:>10} / {total_send:<7} = {rnd(ws_msgs_sent / total_send):8} kB/send")
-    print(f"Sent Per machine : {total_send:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_send / duration_sec / test_machine_num):8} #/s per machine")
+    print(f"\nSent Event       : {total_send:>10} / {rnd(duration):<7} = {rnd(total_send / duration):8} #/s")
+    print(f"Sent Data        : {bytes_sent:>10} / {rnd(duration):<7} = {rnd(bytes_sent / duration):8} kB/s")
+    print(f"Data per send    : {bytes_sent:>10} / {total_send:<7} = {rnd(bytes_sent / total_send):8} kB/send")
+    print(f"Sent Per machine : {total_send:>10} / {rnd(duration)} / {test_machine_num} = {rnd(total_send / duration / test_machine_num):8} #/s per machine")
 
-    print(f"Received Event   : {total_recv:>10} / {rnd(duration_sec):<7} = {rnd(total_recv / duration_sec):8} #/s")
-    print(f"Received Data    : {ws_msgs_received:>10} / {rnd(duration_sec):<7} = {rnd(ws_msgs_received / duration_sec):8} kB/s")
-    print(f"Data per receive : {ws_msgs_received:>10} / {total_recv:<7} = {rnd(ws_msgs_received / total_recv):8} kB/recv")
-    print(f"Received Per     : {total_recv:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_recv / duration_sec / test_machine_num):8} #/s per machine")
+    print(f"\nReceived Event   : {total_recv:>10} / {rnd(duration):<7} = {rnd(total_recv / duration):8} #/s")
+    print(f"Received Data    : {bytes_recv:>10} / {rnd(duration):<7} = {rnd(bytes_recv / duration):8} kB/s")
+    print(f"Data per receive : {bytes_recv:>10} / {total_recv:<7} = {rnd(bytes_recv / total_recv):8} kB/recv")
+    print(f"Received Per     : {total_recv:>10} / {rnd(duration)} / {test_machine_num} = {rnd(total_recv / duration / test_machine_num):8} #/s per machine")
 
-    print(f"Delay            : {total_delay:>10} / {total_recv:<7} = {rnd(total_delay / total_recv):8} ms/recv")
+    print(f"\nDelay            : {total_delay:>10} / {total_recv:<7} = {rnd(total_delay / total_recv):8} ms/recv")
 
 
 def download_logs():
     yes = input("Is it OK to remove `./logs`?\nenter 'yes' to continue : ")
     if yes == "yes" or yes == "y":
         for file in os.listdir(LOG_PATH):
-            os.remove(filepath(file))
+            if file.endswith('.json'):
+                os.remove(filepath(file))
     if not os.path.exists(LOG_PATH):
         os.mkdir(LOG_PATH)
 
