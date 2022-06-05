@@ -113,12 +113,12 @@ def main():
     print(f"Sent Event       : {total_send:>10} / {rnd(duration_sec):<7} = {rnd(total_send / duration_sec):8} #/s")
     print(f"Sent Data        : {ws_msgs_sent:>10} / {rnd(duration_sec):<7} = {rnd(ws_msgs_sent / duration_sec):8} kB/s")
     print(f"Data per send    : {ws_msgs_sent:>10} / {total_send:<7} = {rnd(ws_msgs_sent / total_send):8} kB/send")
-    print(f"Sent Per machine : {total_send:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_send /duration_sec / test_machine_num):8} #/s per machine")
+    print(f"Sent Per machine : {total_send:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_send / duration_sec / test_machine_num):8} #/s per machine")
 
     print(f"Received Event   : {total_recv:>10} / {rnd(duration_sec):<7} = {rnd(total_recv / duration_sec):8} #/s")
     print(f"Received Data    : {ws_msgs_received:>10} / {rnd(duration_sec):<7} = {rnd(ws_msgs_received / duration_sec):8} kB/s")
     print(f"Data per receive : {ws_msgs_received:>10} / {total_recv:<7} = {rnd(ws_msgs_received / total_recv):8} kB/recv")
-    print(f"Received Per     : {total_recv:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_recv /duration_sec / test_machine_num):8} #/s per machine")
+    print(f"Received Per     : {total_recv:>10} / {rnd(duration_sec)} / {test_machine_num} = {rnd(total_recv / duration_sec / test_machine_num):8} #/s per machine")
 
     print(f"Delay            : {total_delay:>10} / {total_recv:<7} = {rnd(total_delay / total_recv):8} ms/recv")
 

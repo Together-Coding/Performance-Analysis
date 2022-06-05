@@ -75,7 +75,7 @@ for (let i = 0; i < eventProb.length; i++) {
     let ev = eventProb[i][0];
     eventDelayCounter[ev] = new Counter('DELAY_' + ev);
     eventRecvCounter[ev] = new Counter('RECV_' + ev);
-    eventSendCounter[ev] = new Counter('SENT_' + ev);
+    eventSendCounter[ev] = new Counter('SEND_' + ev);
 }
 
 const IS_FARGATE = Boolean(__ENV.ECS_CONTAINER_METADATA_URI_V4)
@@ -233,8 +233,8 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             msg = `${type}`;
         }
         socket.send(msg);
-        eventSendCounter[event].add(1);
         console.info('    🚀    EMIT', msg)
+        if (Object.keys(eventSendCounter).includes(event)) eventSendCounter[event].add(1);
     }
 
     const cantHandleMessage = (e, data) => {
@@ -487,6 +487,8 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             }, chain)
         },
         [EV_FILE_MOD]: (chain) => {
+            if (currentFile == null || targetData.dir[currentFile] == null) return;
+
             return emit(EV_FILE_MOD, {
                 ownerId: target_ptc_id,
                 file: currentFile,
