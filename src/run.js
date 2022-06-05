@@ -15,6 +15,7 @@ import http from "k6/http";
 import { b64decode } from "k6/encoding";
 import { uuidv4, randomIntBetween } from "./k6_utils.js";
 import { textSummary } from "./k6_summary.js"
+import { Counter } from "k6/metrics";
 
 import { isObject, getEvent, getRandFileName, getRandFromObjKey, getRandWords, getRandWord } from "./utils.js";
 import { getTaskArn } from "./server.js";
@@ -43,6 +44,7 @@ import {
     EV_FEEDBACK_COMMENT,
     EVENT_RATE,
     EV_FEEDBACK_LIST,
+    eventProb,
 
 } from "./constants.js";
 import { codes } from "./dummy.js";
@@ -64,6 +66,17 @@ export const options = {
         },
     },
 };
+
+const eventDelayCounter = {}
+const eventSendCounter = {}
+const eventRecvCounter = {}
+
+for (let i = 0; i < eventProb.length; i++) {
+    let ev = eventProb[i][0];
+    eventDelayCounter[ev] = new Counter('DELAY_' + ev);
+    eventRecvCounter[ev] = new Counter('RECV_' + ev);
+    eventSendCounter[ev] = new Counter('SENT_' + ev);
+}
 
 const IS_FARGATE = Boolean(__ENV.ECS_CONTAINER_METADATA_URI_V4)
 
@@ -173,8 +186,11 @@ export default function ({ url, configs, server_url, task_arn, token }) {
 
     const on = (event, listener) => {
         eventHandler[event] = (data) => {
+            if (Object.keys(eventDelayCounter).includes(event) && data._ts_4 != null && data._ts_1 != null) {
+                eventDelayCounter[event].add(data._ts_4 - data._ts_1);
+                eventRecvCounter[event].add(1);
+            }
             log.push(data);
-            if (log.length % 100 == 0) console.log(`Recv : ${log.length}`);
 
             // Call event handler
             listener(data);
@@ -217,6 +233,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             msg = `${type}`;
         }
         socket.send(msg);
+        eventSendCounter[event].add(1);
         console.info('    🚀    EMIT', msg)
     }
 
