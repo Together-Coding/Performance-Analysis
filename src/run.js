@@ -262,7 +262,8 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         let payload = JSON.stringify({ task_arn, log, })
 
         let params = {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            compression: "gzip",
         }
         let resp = http.post(CONFIG_URL + "/admin/test/tester/end", payload, params)
         if (resp.status != 200) {
