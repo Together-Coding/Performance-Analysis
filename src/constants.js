@@ -1,4 +1,4 @@
-export const EVENT_RATE = 1  // emit num by 1 seconds
+export const EVENT_RATE = 2  // emit num by 1 seconds
 
 // Periodically emitted events
 export const EV_DIR_INFO = "DIR_INFO"  // 파일리스트
@@ -38,9 +38,9 @@ export const eventProb = [
     [EV_FEEDBACK_ADD, 0.5],
     [EV_FEEDBACK_COMMENT, 2.5],
     // Additional
-    [EV_FILE_CREATE, 1],
-    [EV_FILE_UPDATE, 0.5],
-    [EV_FILE_DELETE, 0.7],
+    [EV_FILE_CREATE, 0.01],
+    [EV_FILE_UPDATE, 0.01],
+    [EV_FILE_DELETE, 0.01],
 ]
 
 export const FILE_EXT = ".py"

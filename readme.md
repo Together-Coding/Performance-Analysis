@@ -23,7 +23,7 @@ TC (traffic control) script needs to be executed in NAT instance in order to lim
     `$ . tc_clear.sh`
 
 
-# Result
+# Traffic control result
 
 Before executing iperf3:
 

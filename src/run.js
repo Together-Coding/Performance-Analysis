@@ -13,7 +13,7 @@ import { check } from "k6";
 import ws from "k6/ws";
 import http from "k6/http";
 import { b64decode } from "k6/encoding";
-import { uuidv4, randomIntBetween } from "./k6_utils.js";
+import { uuidv4, randomIntBetween, randomItem } from "./k6_utils.js";
 import { textSummary } from "./k6_summary.js"
 import { Counter, Trend } from "k6/metrics";
 
@@ -433,7 +433,8 @@ export default function ({ url, configs, server_url, task_arn, token }) {
     })
 
     on(EV_FILE_SAVE, data => { })
-
+    
+    on(EV_FILE_MOD, data => { })
     on(EV_FEEDBACK_LIST, data => {
         for (let d of data) {
             let feedbacks = d.refs ? (d.refs.feedbacks ? d.refs.feedbacks : []) : [];
@@ -489,7 +490,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             }, chain)
         },
         [EV_FILE_MOD]: (chain) => {
-            if (currentFile == null || targetData.dir[currentFile] == null) return;
+            if (currentFile == null || targetData.dir[currentFile] == null) return emitHandler[EV_FILE_READ]();
 
             return emit(EV_FILE_MOD, {
                 ownerId: target_ptc_id,
@@ -501,7 +502,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
 
         },
         [EV_FILE_SAVE]: (chain) => {
-            if (currentFile == null || targetData.dir[currentFile] == null) return;
+            if (currentFile == null || targetData.dir[currentFile] == null) return emitHandler[EV_FILE_READ]();
 
             return emit(EV_FILE_SAVE, {
                 ownerId: target_ptc_id,
@@ -512,13 +513,17 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         },
         [EV_FEEDBACK_ADD]: (chain) => {
             let c = getRandCursor()
+            let acl = []
+            for (let i=0; i<3; i++)
+                acl.push(randomItem(Object.keys(globalData.all_participant)))
+            
             return emit(EV_FEEDBACK_ADD, {
                 ref: {
                     ownerId: target_ptc_id,
                     file: currentFile,
                     line: `${c[1]}.${c[2]}`
                 },
-                acl: Object.keys(globalData.all_participant),  // all ptcs
+                acl,
                 comment: getRandWords() + "???",
             }, chain)
         },
@@ -600,7 +605,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
     const response = ws.connect(url, {}, function (_socket) {
         socket = _socket
         let timeout_10s = null;
-        let timeout_60s = null;
+        let timeout_long = null;
 
         socket.setInterval(() => {
             let resp = http.get(
@@ -625,20 +630,20 @@ export default function ({ url, configs, server_url, task_arn, token }) {
             if (!timeout_10s) {
                 timeout_10s = 1
                 socket.setTimeout(() => {
-                    emitAfterInit(EV_ACTIVITY_PING)
-                    emitAfterInit(EV_FEEDBACK_LIST)
+                    // emitAfterInit(EV_ACTIVITY_PING)
                     timeout_10s = null;
                 }, 1000 * 10)
             }
-            if (!timeout_60s) {
+            if (!timeout_long) {
                 if (!isEmittable()) return;
-                timeout_60s = 1
+                timeout_long = 1
                 socket.setTimeout(() => {
+                    emitAfterInit(EV_FEEDBACK_LIST)
                     emitAfterInit(EV_FILE_CREATE)
-                    timeout_60s = null;
-                }, 1000 * 60)
+                    timeout_long = null;
+                }, 1000 * 60 * 3)
             }
-        }, 1000)
+        }, 3000)
 
         // on connection
         socket.on("open", () => {
@@ -667,9 +672,7 @@ export default function ({ url, configs, server_url, task_arn, token }) {
         });
 
         socket.setInterval(() => {
-            socket.setTimeout(() => {
-                emitRandom();
-            }, 1)
+            emitRandom();
         }, 1000 / EVENT_RATE);
 
         // on message (event)
