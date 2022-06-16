@@ -28,36 +28,31 @@ ABS_PATH = os.getcwd()
 LOG_PATH = os.path.join("logs")
 
 SUMMARY_FILE_PREFIX = "summary-"
+PROCESSED_FILE_PREFIX = "proc-"
 
 DELAY_METRIC_PREFIX = "DELAY_"
 RECV_METRIC_PREFIX = "RECV_"
 SEND_METRIC_PREFIX = "SEND_"
 REMAINING_TIME_KEY = "REMAINING_TIME"
 
-EV_FILE_MOD = "FILE_MOD"
-
-
-def filepath(v):
-    return os.path.join(LOG_PATH, v)
-
 
 def rnd(v, prec=2):
     return round(v, prec)
 
 
-def main():
+def main(test_id):
+    log_folder = os.path.join(LOG_PATH, str(test_id))
     summary_files = []
     # log_files = []
 
     print("Reading ...")
-    for idx, file in enumerate(sorted(os.listdir(LOG_PATH))):
+    files = list(filter(lambda f: f.endswith('.json'), os.listdir(log_folder)))
+    for idx, file in enumerate(sorted(files)):
         print(f"{idx:3}. {file}")
-        with open(filepath(file), "rt") as fp:
-            content = json.loads(fp.read())
-            if file.startswith(SUMMARY_FILE_PREFIX):
-                summary_files.append(content)
-            # else:
-            #     log_files.append(content)
+        
+        if file.startswith(SUMMARY_FILE_PREFIX):
+            with open(os.path.join(log_folder, file), "rt") as fp:
+                summary_files.append(json.loads(fp.read()))
 
     bytes_sent = 0  # kB
     bytes_recv = 0  # kB
@@ -111,30 +106,107 @@ def main():
     print("\n# Summary")
     print(f"Test Machine Num : {test_machine_num:>10}")
 
-    print(f"\nSent Event       : {total_send:>10} / {rnd(duration):<7} = {rnd(total_send / duration):8} #/s")
-    print(f"Sent Data        : {bytes_sent:>10} / {rnd(duration):<7} = {rnd(bytes_sent / duration):8} kB/s")
-    print(f"Data per send    : {bytes_sent:>10} / {total_send:<7} = {rnd(bytes_sent / total_send):8} kB/send")
+    print(f"\nSent Event       : {total_send:>10} / {rnd(duration):<8} = {rnd(total_send / duration):8} #/s")
+    # print(f"Sent Data        : {bytes_sent:>10} / {rnd(duration):<7} = {rnd(bytes_sent / duration):8} kB/s")
+    # print(f"Data per send    : {bytes_sent:>10} / {total_send:<7} = {rnd(bytes_sent / total_send):8} kB/send")
     print(f"Sent Per machine : {total_send:>10} / {rnd(duration)} / {test_machine_num} = {rnd(total_send / duration / test_machine_num):8} #/s per machine")
 
-    print(f"\nReceived Event   : {total_recv:>10} / {rnd(duration):<7} = {rnd(total_recv / duration):8} #/s")
-    print(f"Received Data    : {bytes_recv:>10} / {rnd(duration):<7} = {rnd(bytes_recv / duration):8} kB/s")
-    print(f"Data per receive : {bytes_recv:>10} / {total_recv:<7} = {rnd(bytes_recv / total_recv):8} kB/recv")
-    print(f"Received Per     : {total_recv:>10} / {rnd(duration)} / {test_machine_num} = {rnd(total_recv / duration / test_machine_num):8} #/s per machine")
+    print(f"\nRecv Event       : {total_recv:>10} / {rnd(duration):<8} = {rnd(total_recv / duration):8} #/s")
+    # print(f"Received Data    : {bytes_recv:>10} / {rnd(duration):<7} = {rnd(bytes_recv / duration):8} kB/s")
+    # print(f"Data per receive : {bytes_recv:>10} / {total_recv:<7} = {rnd(bytes_recv / total_recv):8} kB/recv")
+    print(f"Recv Per machine : {total_recv:>10} / {rnd(duration)} / {test_machine_num} = {rnd(total_recv / duration / test_machine_num):8} #/s per machine")
 
-    print(f"\nDelay            : {total_delay:>10} / {total_recv:<7} = {rnd(total_delay / total_recv):8} ms/recv")
+    print(f"\nDelay            : {total_delay:>10} / {total_recv:<8} = {rnd(total_delay / total_recv):8} ms/recv")
 
 
-def download_logs():
-    yes = input("Is it OK to remove `./logs`?\nenter 'yes' to continue : ")
-    if yes == "yes" or yes == "y":
-        for file in os.listdir(LOG_PATH):
-            if file.endswith('.json'):
-                os.remove(filepath(file))
-    if not os.path.exists(LOG_PATH):
-        os.mkdir(LOG_PATH)
+def download_logs(test_id):
+    log_folder = os.path.join(LOG_PATH, str(test_id))
+    
+    need_download = True
+    if os.path.exists(log_folder):
+        yes = input(f"Is it OK to remove `./{log_folder}`?\nenter 'yes' to continue : ")
+        if yes.lower() in ['y', 'yes']:
+            for file in os.listdir(log_folder):
+                if file.endswith('.json'):
+                    os.remove(os.path.join(log_folder, file))
+        else:
+            need_download = False
+    else:
+        os.mkdir(log_folder)
 
-    process = subprocess.Popen(["aws", "s3", "sync", f"s3://together-coding-dev/test/{test_id}", "./logs"])
-    process.wait()
+    if need_download:
+        process = subprocess.Popen(["aws", "s3", "sync", f"s3://together-coding-dev/test/{test_id}", f"./logs/{test_id}"])
+        process.wait()
+
+min_ts = 999999999999999999
+
+def foo(test_id):
+    ignore_event = ['FILE_CREATE', 'FILE_DELETE', 'FILE_UPDATE']
+    def group_by_seconds(rows):
+        global min_ts
+
+        for row in rows:
+            if not ("_ts_1" in row and "_ts_4" in row and "_s_emit" in row and "_c_emit" in row):
+                continue
+            if row['_s_emit'] in ignore_event or row['_c_emit'] in ignore_event:
+                continue
+
+            event = row["_s_emit"]
+            ts = int(row["_ts_4"] / 1000)
+            diff = row["_ts_4"] - row["_ts_1"]
+
+            time_delay[event][ts] += diff
+            time_delay_count[event][ts] += 1
+            if min_ts > ts:
+                min_ts = ts
+
+    log_folder = os.path.join(LOG_PATH, str(test_id))
+    summary_files = []
+    time_delay = defaultdict(lambda : defaultdict(float))  # event_name: {timestamp: total_delay}
+    time_delay_count = defaultdict(lambda : defaultdict(int))  # event_name: {timestamp: total_count}
+    time_delay_avg = defaultdict(list)
+    time_delay_total = defaultdict(float)
+    time_delay_total_count = defaultdict(int)
+
+    print("Reading ...")
+    files = list(filter(lambda f: f.endswith('.json'), os.listdir(log_folder)))
+    for idx, file in enumerate(sorted(files)):
+        print(f"{idx:3}. {file}")
+        if file.startswith(SUMMARY_FILE_PREFIX) or file.startswith(PROCESSED_FILE_PREFIX):
+            continue
+
+        with open(os.path.join(log_folder, file), "rt") as fp:
+            group_by_seconds(json.loads(fp.read()))
+
+    for event in time_delay.keys():
+        delays: dict[float] = time_delay[event]
+        counts: dict[int] = time_delay_count[event]
+
+        tss = sorted(delays.keys())
+        for ts in tss:
+            time_delay_avg[event].append([ts - min_ts, round(delays[ts] / counts[ts], 2)])
+            time_delay_total[ts] += delays[ts]
+            time_delay_total_count[ts] += counts[ts]
+
+        with open(os.path.join(log_folder, PROCESSED_FILE_PREFIX +event + '.json'), 'wt') as fp:
+            fp.write(json.dumps(time_delay_avg[event]))
+
+    with open(os.path.join(log_folder, PROCESSED_FILE_PREFIX + 'total.json'), 'wt') as fp:
+        tss = sorted(list(time_delay_total.keys()))
+        data_by_ts = [(ts-min_ts, round(time_delay_total[ts] / time_delay_total_count[ts], 2)) for ts in tss]
+        fp.write(json.dumps(data_by_ts))
+
+
+    
+# {"_ts_1": 1654692994857, "_ts_3": 1654692994842, "_ts_4": 1654692994857,
+#   "_s_emit": "TIME_SYNC_ACK", "_ts_3_eid": "QFcYFY7xy2Cwl4ftAACo", 
+#   "uuid": "3e0e51f0-8308-4e85-bff6-60303caabd0d",  
+#   "ts1": 1654692994702, "ts2": 1654692994857, "server_ts": 1654692994815},
+
+# {"ptcId": 94, "nickname": "\uc720\uc80028", "is_teacher": false, "lesson": {...},
+#  "uuid": "51139730-c4f8-4ff0-a6f6-59648676114e", "_ts_1": 1654692994702, 
+# "_ts_1_eid": "QFcYFY7xy2Cwl4ftAACo", "_ts_2": 1654692994821, "_c_emit": "INIT_LESSON", 
+# "_ts_3": 1654692994874, "_ts_3_eid": "QFcYFY7xy2Cwl4ftAACo", "_s_emit": "INIT_LESSON", "_ts_4": 1654692994884},
 
 
 if __name__ == "__main__":
@@ -144,6 +216,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     test_id = args.test_id
 
-    download_logs()
+    download_logs(test_id)
 
-    main()
+    main(test_id)
+    # foo(test_id)
