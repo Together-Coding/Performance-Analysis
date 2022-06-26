@@ -2,7 +2,7 @@
 
 ### CMD ###
 # Describe and check sent/recved size
-# tc -s {qdisc|class|filter} ls dev eth0
+# $ tc -s {qdisc|class|filter} ls dev eth0
 # Delete filter by prio
 # $ tc filter del dev eth0 prio {prio}
 
@@ -12,9 +12,8 @@ NAT_SUBNET_PREFIX=27
 NAT_LAST_HOST=$(( 2 ** (32 - $NAT_SUBNET_PREFIX) ))
 
 INTERFACE="eth0"
-SPEED_UNIT="mbps"
-SPEED_DOWNLOAD="60.76"  # mbps == megabytes
-SPEED_UPLOAD="25.95"
+SPEED_UNIT="mbit"
+SPEED_DOWNLOAD="60.76"  # mbps == megabytes per second, mbit == megabit per second
 DELAY=10  # ms
 TC_DEFAULT=$(( ${#NAT_SUBNET[@]} * $NAT_LAST_HOST ))
 TC_TOTAL_RATE=$(echo $NAT_LAST_HOST*$SPEED_DOWNLOAD | bc | awk '{printf("%.f\n", ($1)+0.5)}' )
