@@ -40,10 +40,9 @@ def rnd(v, prec=2):
     return round(v, prec)
 
 
-def main(test_id):
+def process_summary(test_id):
     log_folder = os.path.join(LOG_PATH, str(test_id))
     summary_files = []
-    # log_files = []
 
     print("Reading ...")
     files = list(filter(lambda f: f.endswith('.json'), os.listdir(log_folder)))
@@ -120,6 +119,9 @@ def main(test_id):
 
 
 def download_logs(test_id):
+    if not os.path.exists(LOG_PATH):
+        os.mkdir(LOG_PATH)
+
     log_folder = os.path.join(LOG_PATH, str(test_id))
     
     need_download = True
@@ -138,9 +140,11 @@ def download_logs(test_id):
         process = subprocess.Popen(["aws", "s3", "sync", f"s3://together-coding-dev/test/{test_id}", f"./logs/{test_id}"])
         process.wait()
 
+
 min_ts = 999999999999999999
 
-def foo(test_id):
+
+def process_logs(test_id):
     ignore_event = ['FILE_CREATE', 'FILE_DELETE', 'FILE_UPDATE']
     def group_by_seconds(rows):
         global min_ts
@@ -161,7 +165,6 @@ def foo(test_id):
                 min_ts = ts
 
     log_folder = os.path.join(LOG_PATH, str(test_id))
-    summary_files = []
     time_delay = defaultdict(lambda : defaultdict(float))  # event_name: {timestamp: total_delay}
     time_delay_count = defaultdict(lambda : defaultdict(int))  # event_name: {timestamp: total_count}
     time_delay_avg = defaultdict(list)
@@ -197,18 +200,6 @@ def foo(test_id):
         fp.write(json.dumps(data_by_ts))
 
 
-    
-# {"_ts_1": 1654692994857, "_ts_3": 1654692994842, "_ts_4": 1654692994857,
-#   "_s_emit": "TIME_SYNC_ACK", "_ts_3_eid": "QFcYFY7xy2Cwl4ftAACo", 
-#   "uuid": "3e0e51f0-8308-4e85-bff6-60303caabd0d",  
-#   "ts1": 1654692994702, "ts2": 1654692994857, "server_ts": 1654692994815},
-
-# {"ptcId": 94, "nickname": "\uc720\uc80028", "is_teacher": false, "lesson": {...},
-#  "uuid": "51139730-c4f8-4ff0-a6f6-59648676114e", "_ts_1": 1654692994702, 
-# "_ts_1_eid": "QFcYFY7xy2Cwl4ftAACo", "_ts_2": 1654692994821, "_c_emit": "INIT_LESSON", 
-# "_ts_3": 1654692994874, "_ts_3_eid": "QFcYFY7xy2Cwl4ftAACo", "_s_emit": "INIT_LESSON", "_ts_4": 1654692994884},
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Perform statistical processing on K6 logs")
     parser.add_argument("test_id", type=int, help="test ID you want to process")
@@ -218,5 +209,5 @@ if __name__ == "__main__":
 
     download_logs(test_id)
 
-    main(test_id)
-    # foo(test_id)
+    process_summary(test_id)
+    process_logs(test_id)
