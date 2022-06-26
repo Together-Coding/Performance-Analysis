@@ -146,7 +146,7 @@ Downloading the logs and the summary of a specific test from AWS S3, [analytics/
 
 ![graph-overall](./docs/graph_overall.png)
 
-For the overall performance test (First goal), there were total 87,173 messages of transmissions and reception, and result is like this:
+For the overall performance test (First goal), there were total 119,631 messages of transmissions and reception, and result is like this:
 
 | Server Recv | Server Send |  Average  |  Median  |   P96    |     Max     |
 |:-----------:|:-----------:|:---------:|:--------:|:--------:|:-----------:|
@@ -154,7 +154,7 @@ For the overall performance test (First goal), there were total 87,173 messages 
 
 ![graph-code-modification](./docs/graph_file_mod.png)
 
-For the performance test of code-modification (Second goal), there were total 89,789 messages of transmissions and reception, and result is like this:
+For the performance test of code-modification (Second goal), there were total 119,788 messages of transmissions and reception, and result is like this:
 
 | Server Recv | Server Send | Average  |   Median   |   P96    |    Max    |
 |:-----------:|:-----------:|:--------:|:----------:|:--------:|:---------:|
