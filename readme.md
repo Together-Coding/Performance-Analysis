@@ -156,9 +156,9 @@ For the overall performance test (First goal), there were total 119,631 messages
 
 For the performance test of code-modification (Second goal), there were total 119,788 messages of transmissions and reception, and result is like this:
 
-| Server Recv | Server Send | Average  |   Median   |   P96    |    Max    |
-|:-----------:|:-----------:|:--------:|:----------:|:--------:|:---------:|
-|  100.0 #/s  |  299.3 #/s  | 30.96 ms | 21.2453 ms | 22.28 ms | 733.19 ms |
+| Server Recv | Server Send | Average  |  Median  |   P96    |    Max    |
+|:-----------:|:-----------:|:--------:|:--------:|:--------:|:---------:|
+|  100.0 #/s  |  299.3 #/s  | 30.96 ms | 21.25 ms | 22.28 ms | 733.19 ms |
 
 ## Quickstart
 
